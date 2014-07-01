@@ -383,47 +383,56 @@ def main():
     # http://www.raspberrypi.org/phpBB3/viewtopic.php?p=391583#p391583
     # TODO: requires cleanup
     logging.debug("Main Loop start")
+    lastMotionDetected = 0
     while (keep_looping(end_time)):
-        # Get comparison image
-        logging.debug("Current queue size FullSize:%d ThumbSize:%d" % \
-                                   (upload_queue.qsize(), 
-                                   (upload_queue_thumbs.qsize() if upload_queue_thumbs else 0) ))
-        buffer2, file_handle = capture_test_image(config)
-        
-        # Count changed pixels
-        changedPixels = 0
-        takePicture = False
-        
-        if (config.scanDebugMode): # in debug mode, save a bitmap-file with marked changed pixels and with visible testarea-borders
-            debugimage = Image.new("RGB",(config.scratchImageWidth, config.scratchImageHeight))
-            debugim = debugimage.load()
 
-        for z in xrange(0, config.scanAreaCount): # = xrange(0,1) with default-values = z will only have the value of 0 = only one scan-area = whole picture
-            for x in xrange(config.scanBorders[z][0][0]-1, config.scanBorders[z][0][1]): # = xrange(0,100) with default-values
-                for y in xrange(config.scanBorders[z][1][0]-1, config.scanBorders[z][1][1]):   # = xrange(0,75) with default-values
-                    if (config.scanDebugMode):
-                        debugim[x,y] = buffer2[x,y]
-                        if ((x == config.scanBorders[z][0][0]-1) 
-                                             or (x == config.scanBorders[z][0][1]-1)
-                                             or (y == config.scanBorders[z][1][0]-1)
-                                             or (y == config.scanBorders[z][1][1]-1)):
-                            #logging.debug( "Border %s %s" % (x,y))
-                            debugim[x,y] = (0, 0, 255) # in debug mode, mark all border pixel to blue
-                    # Just check green channel as it's the highest quality channel
-                    pixdiff = abs(buffer1[x,y][1] - buffer2[x,y][1])
-                    if pixdiff > config.threshold:
-                        changedPixels += 1
+        # Continuous shooting for 20 sec after motion capture
+        if (time.time() - lastMotionDetected < 20):
+            takePicture = True
+            buffer2 = None
+        else:
+
+            # Get comparison image
+            logging.debug("Current queue size FullSize:%d ThumbSize:%d" % \
+                                       (upload_queue.qsize(), 
+                                       (upload_queue_thumbs.qsize() if upload_queue_thumbs else 0) ))
+            buffer2, file_handle = capture_test_image(config)
+            
+            # Count changed pixels
+            changedPixels = 0
+            takePicture = False
+
+            if (config.scanDebugMode): # in debug mode, save a bitmap-file with marked changed pixels and with visible testarea-borders
+                debugimage = Image.new("RGB",(config.scratchImageWidth, config.scratchImageHeight))
+                debugim = debugimage.load()
+
+            for z in xrange(0, config.scanAreaCount): # = xrange(0,1) with default-values = z will only have the value of 0 = only one scan-area = whole picture
+                for x in xrange(config.scanBorders[z][0][0]-1, config.scanBorders[z][0][1]): # = xrange(0,100) with default-values
+                    for y in xrange(config.scanBorders[z][1][0]-1, config.scanBorders[z][1][1]):   # = xrange(0,75) with default-values
                         if (config.scanDebugMode):
-                            debugim[x,y] = (0, 255, 0) # in debug mode, mark all changed pixel to green
-                    # Save an image if pixels changed
-                    if (changedPixels > config.sensitivity):
-                        takePicture = True # will shoot the main photo later
+                            debugim[x,y] = buffer2[x,y]
+                            if ((x == config.scanBorders[z][0][0]-1) 
+                                                 or (x == config.scanBorders[z][0][1]-1)
+                                                 or (y == config.scanBorders[z][1][0]-1)
+                                                 or (y == config.scanBorders[z][1][1]-1)):
+                                #logging.debug( "Border %s %s" % (x,y))
+                                debugim[x,y] = (0, 0, 255) # in debug mode, mark all border pixel to blue
+                        # Just check green channel as it's the highest quality channel
+                        pixdiff = abs(buffer1[x,y][1] - buffer2[x,y][1])
+                        if pixdiff > config.threshold:
+                            changedPixels += 1
+                            if (config.scanDebugMode):
+                                debugim[x,y] = (0, 255, 0) # in debug mode, mark all changed pixel to green
+                        # Save an image if pixels changed
+                        if (changedPixels > config.sensitivity):
+                            takePicture = True # will shoot the main photo later
+                            lastMotionDetected = time.time()                        
+                        if ((config.scanDebugMode == False) and (changedPixels > config.sensitivity)):
+                            break  # break the y loop
                     if ((config.scanDebugMode == False) and (changedPixels > config.sensitivity)):
-                        break  # break the y loop
+                        break  # break the x loop
                 if ((config.scanDebugMode == False) and (changedPixels > config.sensitivity)):
-                    break  # break the x loop
-            if ((config.scanDebugMode == False) and (changedPixels > config.sensitivity)):
-                break  # break the z loop
+                    break  # break the z loop
 
         
         if (config.scanDebugMode):
@@ -461,7 +470,8 @@ def main():
 
 
         # Swap comparison buffers
-        buffer1 = buffer2
+        if (buffer2 != None):
+            buffer1 = buffer2
 
     # The script has run for hrs_to_loop hours. Time to quit.
     logging.info("Wait until all pictures are uploaded")
