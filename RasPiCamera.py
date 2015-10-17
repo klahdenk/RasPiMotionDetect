@@ -404,8 +404,8 @@ def main():
     lastMotionDetected = 0
     while (keep_looping(end_time)):
 
-        # Continuous shooting for 20 sec after motion capture
-        if (time.time() - lastMotionDetected < 20):
+        # Continuous shooting for 5 sec after motion capture
+        if (time.time() - lastMotionDetected < 5):
             takePicture = True
             buffer2 = None
         else:
