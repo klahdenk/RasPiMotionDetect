@@ -6,6 +6,12 @@ import time, os, subprocess, tempfile, cStringIO
 import threading, Queue
 
 import gdata.photos.service
+import oauth2client.client
+
+from oauth2client import client
+from oauth2client.file import Storage
+
+import httplib2
 from PIL import Image
 
 # This limit of a 1000 pics per album comes from here:
@@ -184,9 +190,21 @@ class PicasaLogin:
     
     def login(self):
         try:
-            self.picasa = gdata.photos.service.PhotosService(email=self.email,
-                                                password=self.password)
-            self.picasa.ProgrammaticLogin()
+            filename = "/home/pi/.RasPiCamera")
+            storage = Storage(filename)
+            credentials = storage.get()
+            if credentials is None or credentials.invalid:  
+                flow = client.flow_from_clientsecrets('client_secrets.json',scope='https://picasaweb.google.com/data/',redirect_uri='urn:ietf:wg:oauth:2.0:oob')    
+                auth_uri = flow.step1_get_authorize_url()   
+                print 'Authorization URL: %s' % auth_uri
+                auth_code = raw_input('Enter the auth code: ')
+                credentials = flow.step2_exchange(auth_code)
+                storage.put(credentials)
+            
+            if credentials.access_token_expired:
+                credentials.refresh(httplib2.Http())
+
+            self.picasa = gdata.photos.service.PhotosService(email='default',additional_headers={'Authorization' : 'Bearer %s' % credentials.access_token})
             return True
         except Exception as ex:
             logging.critical("Picasa Login failed! Exception: %s" % ex)
